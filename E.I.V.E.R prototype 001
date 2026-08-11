@@ -1,0 +1,522 @@
+"""
+E.I.V.E.R.
+Electronic Intelligent Vehicle, Logistics & Emergency Response
+
+Prototype shipping-company AI assistant.
+
+This version provides:
+- Cargo registration and tracking
+- Customer booking assistance
+- Route monitoring
+- Weather-alert framework
+- System maintenance monitoring
+- Command-line AI assistant interface
+
+Production version should connect these modules to:
+- A real database
+- GPS/telematics
+- Mapping/routing APIs
+- Weather APIs
+- Authentication
+- Company ERP/TMS systems
+"""
+
+import os
+import platform
+import socket
+import sqlite3
+from datetime import datetime
+
+
+class EIVER:
+    def __init__(self):
+        self.name = "E.I.V.E.R."
+        self.version = "1.0"
+        self.database = "eiver.db"
+
+        self.connection = sqlite3.connect(self.database)
+        self.cursor = self.connection.cursor()
+
+        self.setup_database()
+
+        print("=" * 60)
+        print("             E.I.V.E.R. ONLINE")
+        print(" Electronic Intelligent Vehicle, Logistics")
+        print("          & Emergency Response")
+        print("=" * 60)
+
+    # ---------------------------------------------------------
+    # DATABASE
+    # ---------------------------------------------------------
+
+    def setup_database(self):
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cargo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tracking_number TEXT UNIQUE,
+            customer TEXT,
+            origin TEXT,
+            destination TEXT,
+            status TEXT,
+            current_location TEXT,
+            eta TEXT
+        )
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer TEXT,
+            cargo_description TEXT,
+            origin TEXT,
+            destination TEXT,
+            weight REAL,
+            status TEXT
+        )
+        """)
+
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS routes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vehicle TEXT,
+            driver TEXT,
+            origin TEXT,
+            destination TEXT,
+            current_location TEXT,
+            status TEXT
+        )
+        """)
+
+        self.connection.commit()
+
+    # ---------------------------------------------------------
+    # CARGO SYSTEM
+    # ---------------------------------------------------------
+
+    def register_cargo(
+        self,
+        tracking_number,
+        customer,
+        origin,
+        destination,
+        weight=0
+    ):
+
+        try:
+
+            self.cursor.execute("""
+            INSERT INTO cargo
+            (
+                tracking_number,
+                customer,
+                origin,
+                destination,
+                status,
+                current_location,
+                eta
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                tracking_number,
+                customer,
+                origin,
+                destination,
+                "Registered",
+                origin,
+                "Calculating..."
+            ))
+
+            self.connection.commit()
+
+            print(f"\nCargo {tracking_number} registered successfully.")
+
+        except sqlite3.IntegrityError:
+
+            print("\nERROR: Tracking number already exists.")
+
+    def track_cargo(self, tracking_number):
+
+        self.cursor.execute("""
+        SELECT *
+        FROM cargo
+        WHERE tracking_number = ?
+        """, (tracking_number,))
+
+        cargo = self.cursor.fetchone()
+
+        if not cargo:
+            print("\nCargo not found.")
+            return
+
+        print("\n========== CARGO STATUS ==========")
+        print(f"Tracking Number : {cargo[1]}")
+        print(f"Customer        : {cargo[2]}")
+        print(f"Origin          : {cargo[3]}")
+        print(f"Destination     : {cargo[4]}")
+        print(f"Status          : {cargo[5]}")
+        print(f"Location        : {cargo[6]}")
+        print(f"ETA             : {cargo[7]}")
+        print("==================================")
+
+    def update_cargo_location(self, tracking_number, location):
+
+        self.cursor.execute("""
+        UPDATE cargo
+        SET current_location = ?,
+            status = ?
+        WHERE tracking_number = ?
+        """, (
+            location,
+            "In Transit",
+            tracking_number
+        ))
+
+        self.connection.commit()
+
+        if self.cursor.rowcount == 0:
+            print("\nCargo not found.")
+        else:
+            print("\nCargo location updated.")
+
+    # ---------------------------------------------------------
+    # CUSTOMER BOOKING SYSTEM
+    # ---------------------------------------------------------
+
+    def create_booking(
+        self,
+        customer,
+        cargo_description,
+        origin,
+        destination,
+        weight
+    ):
+
+        self.cursor.execute("""
+        INSERT INTO bookings
+        (
+            customer,
+            cargo_description,
+            origin,
+            destination,
+            weight,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            customer,
+            cargo_description,
+            origin,
+            destination,
+            weight,
+            "Pending"
+        ))
+
+        self.connection.commit()
+
+        booking_id = self.cursor.lastrowid
+
+        print("\n========== BOOKING CREATED ==========")
+        print(f"Booking ID : {booking_id}")
+        print(f"Customer   : {customer}")
+        print(f"Cargo      : {cargo_description}")
+        print(f"From       : {origin}")
+        print(f"To         : {destination}")
+        print(f"Weight     : {weight} kg")
+        print("Status     : Pending")
+        print("=====================================")
+
+    # ---------------------------------------------------------
+    # ROUTE MONITORING
+    # ---------------------------------------------------------
+
+    def add_route(
+        self,
+        vehicle,
+        driver,
+        origin,
+        destination
+    ):
+
+        self.cursor.execute("""
+        INSERT INTO routes
+        (
+            vehicle,
+            driver,
+            origin,
+            destination,
+            current_location,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            vehicle,
+            driver,
+            origin,
+            destination,
+            origin,
+            "Preparing"
+        ))
+
+        self.connection.commit()
+
+        print("\nTransport route added.")
+
+    def monitor_routes(self):
+
+        self.cursor.execute("""
+        SELECT *
+        FROM routes
+        """)
+
+        routes = self.cursor.fetchall()
+
+        if not routes:
+            print("\nNo active routes.")
+            return
+
+        print("\n========== ACTIVE ROUTES ==========")
+
+        for route in routes:
+
+            print(
+                f"""
+Vehicle       : {route[1]}
+Driver        : {route[2]}
+Origin        : {route[3]}
+Destination   : {route[4]}
+Current       : {route[5]}
+Status        : {route[6]}
+------------------------------------
+"""
+            )
+
+    # ---------------------------------------------------------
+    # WEATHER WARNING SYSTEM
+    # ---------------------------------------------------------
+
+    def weather_warning(self, location, condition):
+
+        dangerous_conditions = [
+            "storm",
+            "flood",
+            "heavy rain",
+            "cyclone",
+            "hurricane",
+            "snowstorm",
+            "strong winds",
+            "fog"
+        ]
+
+        condition_lower = condition.lower()
+
+        for danger in dangerous_conditions:
+
+            if danger in condition_lower:
+
+                print("\n⚠ WEATHER WARNING ⚠")
+                print(f"Location : {location}")
+                print(f"Condition: {condition}")
+                print("Potentially unsafe transport conditions.")
+                print("E.I.V.E.R. recommends reviewing the route.")
+
+                return
+
+        print(f"\nWeather at {location}: {condition}")
+        print("No configured severe-weather warning detected.")
+
+    # ---------------------------------------------------------
+    # SYSTEM MAINTENANCE
+    # ---------------------------------------------------------
+
+    def system_maintenance(self):
+
+        print("\n========== SYSTEM DIAGNOSTICS ==========")
+
+        print(
+            f"Operating System : "
+            f"{platform.system()} {platform.release()}"
+        )
+
+        print(f"Computer Name    : {socket.gethostname()}")
+
+        print(
+            f"Python Version   : "
+            f"{platform.python_version()}"
+        )
+
+        database_exists = os.path.exists(self.database)
+
+        print(
+            f"Database         : "
+            f"{'ONLINE' if database_exists else 'MISSING'}"
+        )
+
+        print("Database engine  : SQLite")
+        print("AI core          : ONLINE")
+        print("Cargo system     : ONLINE")
+        print("Booking system   : ONLINE")
+        print("Route system     : ONLINE")
+        print("=========================================")
+
+    # ---------------------------------------------------------
+    # AI COMMAND INTERFACE
+    # ---------------------------------------------------------
+
+    def respond(self, command):
+
+        command = command.lower().strip()
+
+        if command in ["hello", "hi", "hey"]:
+
+            return (
+                "Hello. I am E.I.V.E.R., your logistics "
+                "and shipping operations assistant."
+            )
+
+        elif "maintenance" in command:
+
+            self.system_maintenance()
+
+        elif "routes" in command:
+
+            self.monitor_routes()
+
+        elif "help" in command:
+
+            print("""
+E.I.V.E.R. COMMANDS
+
+track <tracking number>
+register cargo
+book cargo
+routes
+maintenance
+weather
+help
+exit
+""")
+
+        elif command.startswith("track"):
+
+            parts = command.split()
+
+            if len(parts) < 2:
+
+                print("Please provide a tracking number.")
+
+            else:
+
+                self.track_cargo(parts[1])
+
+        elif "register cargo" in command:
+
+            tracking = input("Tracking number: ")
+            customer = input("Customer name: ")
+            origin = input("Origin: ")
+            destination = input("Destination: ")
+
+            self.register_cargo(
+                tracking,
+                customer,
+                origin,
+                destination
+            )
+
+        elif "book cargo" in command:
+
+            customer = input("Customer name: ")
+            description = input("Cargo description: ")
+            origin = input("Origin: ")
+            destination = input("Destination: ")
+
+            try:
+
+                weight = float(
+                    input("Cargo weight (kg): ")
+                )
+
+                self.create_booking(
+                    customer,
+                    description,
+                    origin,
+                    destination,
+                    weight
+                )
+
+            except ValueError:
+
+                print("Please enter a valid weight.")
+
+        elif "weather" in command:
+
+            location = input("Location: ")
+            condition = input(
+                "Weather condition: "
+            )
+
+            self.weather_warning(
+                location,
+                condition
+            )
+
+        else:
+
+            print(
+                "I don't recognize that command yet. "
+                "Type 'help' to see available commands."
+            )
+
+    # ---------------------------------------------------------
+    # START E.I.V.E.R.
+    # ---------------------------------------------------------
+
+    def start(self):
+
+        print(
+            "\nE.I.V.E.R. is ready."
+        )
+
+        print(
+            "Type 'help' to see available commands.\n"
+        )
+
+        while True:
+
+            try:
+
+                command = input("YOU > ")
+
+                if command.lower() in [
+                    "exit",
+                    "quit",
+                    "shutdown"
+                ]:
+
+                    print(
+                        "\nE.I.V.E.R. shutting down safely."
+                    )
+
+                    break
+
+                self.respond(command)
+
+            except KeyboardInterrupt:
+
+                print(
+                    "\n\nE.I.V.E.R. shutting down safely."
+                )
+
+                break
+
+        self.connection.close()
+
+
+# -------------------------------------------------------------
+# PROGRAM ENTRY POINT
+# -------------------------------------------------------------
+
+if __name__ == "__main__":
+
+    eiver = EIVER()
+    eiver.start()
