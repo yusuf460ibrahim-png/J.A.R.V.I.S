@@ -1,0 +1,1315 @@
+```python
+import sys
+import math
+import random
+import platform
+import datetime
+import subprocess
+import webbrowser
+
+from PySide6.QtCore import (
+    Qt,
+    QTimer,
+    QPointF,
+    QRectF,
+)
+from PySide6.QtGui import (
+    QColor,
+    QPainter,
+    QPen,
+    QBrush,
+    QFont,
+)
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QTextEdit,
+    QLineEdit,
+    QPushButton,
+    QFrame,
+)
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
+# =========================================================
+# E.I.V.E.R.
+# Enhanced Intelligent Virtual Executive Response
+# =========================================================
+
+APP_NAME = "E.I.V.E.R."
+
+
+# =========================================================
+# FUTURISTIC RADAR
+# =========================================================
+
+class RadarWidget(QWidget):
+
+    def __init__(self):
+        super().__init__()
+
+        self.angle = 0
+        self.pulse = 0
+        self.points = []
+
+        for _ in range(14):
+            self.points.append(
+                (
+                    random.uniform(-1, 1),
+                    random.uniform(-1, 1),
+                    random.uniform(0.3, 1.0)
+                )
+            )
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.timer.start(30)
+
+        self.setMinimumSize(430, 430)
+
+    def animate(self):
+
+        self.angle += 2
+
+        if self.angle >= 360:
+            self.angle = 0
+
+        self.pulse += 0.035
+
+        if self.pulse > math.pi * 2:
+            self.pulse = 0
+
+        self.update()
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+
+        painter.setRenderHint(
+            QPainter.Antialiasing
+        )
+
+        w = self.width()
+        h = self.height()
+
+        cx = w / 2
+        cy = h / 2
+
+        radius = min(w, h) * 0.39
+
+        # -----------------------------------------------
+        # Background
+        # -----------------------------------------------
+
+        painter.fillRect(
+            self.rect(),
+            QColor(2, 8, 14)
+        )
+
+        # -----------------------------------------------
+        # Outer circles
+        # -----------------------------------------------
+
+        for multiplier in [1.0, 0.82, 0.64, 0.46]:
+
+            r = radius * multiplier
+
+            pen = QPen(
+                QColor(0, 220, 255, 90),
+                1
+            )
+
+            painter.setPen(pen)
+
+            painter.drawEllipse(
+                QRectF(
+                    cx - r,
+                    cy - r,
+                    r * 2,
+                    r * 2
+                )
+            )
+
+        # -----------------------------------------------
+        # Crosshair
+        # -----------------------------------------------
+
+        painter.setPen(
+            QPen(
+                QColor(0, 200, 255, 70),
+                1
+            )
+        )
+
+        painter.drawLine(
+            QPointF(cx - radius, cy),
+            QPointF(cx + radius, cy)
+        )
+
+        painter.drawLine(
+            QPointF(cx, cy - radius),
+            QPointF(cx, cy + radius)
+        )
+
+        # -----------------------------------------------
+        # Radar sweep
+        # -----------------------------------------------
+
+        sweep = math.radians(self.angle)
+
+        x2 = cx + math.cos(sweep) * radius
+        y2 = cy + math.sin(sweep) * radius
+
+        painter.setPen(
+            QPen(
+                QColor(0, 255, 255, 230),
+                3
+            )
+        )
+
+        painter.drawLine(
+            QPointF(cx, cy),
+            QPointF(x2, y2)
+        )
+
+        # -----------------------------------------------
+        # Radar ticks
+        # -----------------------------------------------
+
+        painter.setPen(
+            QPen(
+                QColor(0, 180, 220, 130),
+                1
+            )
+        )
+
+        for i in range(0, 360, 15):
+
+            a = math.radians(i)
+
+            inner = radius * 0.94
+            outer = radius
+
+            x1 = cx + math.cos(a) * inner
+            y1 = cy + math.sin(a) * inner
+
+            x2 = cx + math.cos(a) * outer
+            y2 = cy + math.sin(a) * outer
+
+            painter.drawLine(
+                QPointF(x1, y1),
+                QPointF(x2, y2)
+            )
+
+        # -----------------------------------------------
+        # Blips
+        # -----------------------------------------------
+
+        for px, py, brightness in self.points:
+
+            distance = math.sqrt(
+                px * px + py * py
+            )
+
+            if distance > 1:
+                continue
+
+            bx = cx + px * radius
+            by = cy + py * radius
+
+            alpha = int(
+                100 + 150 * brightness
+            )
+
+            painter.setPen(Qt.NoPen)
+
+            painter.setBrush(
+                QBrush(
+                    QColor(
+                        0,
+                        255,
+                        255,
+                        alpha
+                    )
+                )
+            )
+
+            painter.drawEllipse(
+                QPointF(bx, by),
+                4,
+                4
+            )
+
+        # -----------------------------------------------
+        # Central core
+        # -----------------------------------------------
+
+        pulse_size = 15 + (
+            math.sin(self.pulse) * 4
+        )
+
+        painter.setBrush(
+            QColor(0, 255, 255, 50)
+        )
+
+        painter.setPen(
+            QPen(
+                QColor(0, 255, 255),
+                2
+            )
+        )
+
+        painter.drawEllipse(
+            QPointF(cx, cy),
+            pulse_size,
+            pulse_size
+        )
+
+        painter.setBrush(
+            QColor(0, 255, 255)
+        )
+
+        painter.drawEllipse(
+            QPointF(cx, cy),
+            4,
+            4
+        )
+
+        painter.end()
+
+
+# =========================================================
+# E.I.V.E.R. CORE
+# =========================================================
+
+class CoreWidget(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.rotation = 0
+        self.pulse = 0
+
+        timer = QTimer(self)
+
+        timer.timeout.connect(
+            self.animate
+        )
+
+        timer.start(30)
+
+    def animate(self):
+
+        self.rotation += 1
+
+        if self.rotation >= 360:
+            self.rotation = 0
+
+        self.pulse += 0.05
+
+        self.update()
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+
+        painter.setRenderHint(
+            QPainter.Antialiasing
+        )
+
+        cx = self.width() / 2
+        cy = self.height() / 2
+
+        radius = min(
+            self.width(),
+            self.height()
+        ) * 0.32
+
+        painter.fillRect(
+            self.rect(),
+            QColor(2, 8, 14)
+        )
+
+        # -----------------------------------------------
+        # Rotating rings
+        # -----------------------------------------------
+
+        for i in range(3):
+
+            r = radius + i * 20
+
+            painter.setPen(
+                QPen(
+                    QColor(
+                        0,
+                        220,
+                        255,
+                        170 - i * 40
+                    ),
+                    2
+                )
+            )
+
+            rect = QRectF(
+                cx - r,
+                cy - r,
+                r * 2,
+                r * 2
+            )
+
+            start = (
+                self.rotation * 16
+                + i * 500
+            )
+
+            painter.drawArc(
+                rect,
+                start,
+                240 * 16
+            )
+
+        # -----------------------------------------------
+        # Core glow
+        # -----------------------------------------------
+
+        pulse = (
+            math.sin(self.pulse) + 1
+        ) * 4
+
+        painter.setBrush(
+            QColor(
+                0,
+                220,
+                255,
+                35
+            )
+        )
+
+        painter.setPen(
+            QPen(
+                QColor(
+                    0,
+                    240,
+                    255
+                ),
+                3
+            )
+        )
+
+        painter.drawEllipse(
+            QPointF(cx, cy),
+            radius + pulse,
+            radius + pulse
+        )
+
+        # -----------------------------------------------
+        # Core center
+        # -----------------------------------------------
+
+        painter.setBrush(
+            QColor(
+                0,
+                120,
+                160
+            )
+        )
+
+        painter.drawEllipse(
+            QPointF(cx, cy),
+            radius * 0.65,
+            radius * 0.65
+        )
+
+        painter.setBrush(
+            QColor(
+                0,
+                255,
+                255
+            )
+        )
+
+        painter.drawEllipse(
+            QPointF(cx, cy),
+            radius * 0.22,
+            radius * 0.22
+        )
+
+        # -----------------------------------------------
+        # Text
+        # -----------------------------------------------
+
+        painter.setPen(
+            QColor(
+                220,
+                250,
+                255
+            )
+        )
+
+        painter.setFont(
+            QFont(
+                "Consolas",
+                14,
+                QFont.Bold
+            )
+        )
+
+        text = "E.I.V.E.R."
+
+        rect = QRectF(
+            cx - 70,
+            cy + radius + 35,
+            140,
+            30
+        )
+
+        painter.drawText(
+            rect,
+            Qt.AlignCenter,
+            text
+        )
+
+        painter.end()
+
+
+# =========================================================
+# STATUS CARD
+# =========================================================
+
+class StatusCard(QFrame):
+
+    def __init__(
+        self,
+        title,
+        value="ONLINE"
+    ):
+
+        super().__init__()
+
+        self.setObjectName(
+            "StatusCard"
+        )
+
+        layout = QVBoxLayout(
+            self
+        )
+
+        title_label = QLabel(
+            title.upper()
+        )
+
+        title_label.setObjectName(
+            "CardTitle"
+        )
+
+        self.value_label = QLabel(
+            value
+        )
+
+        self.value_label.setObjectName(
+            "CardValue"
+        )
+
+        layout.addWidget(
+            title_label
+        )
+
+        layout.addWidget(
+            self.value_label
+        )
+
+    def set_value(
+        self,
+        value
+    ):
+
+        self.value_label.setText(
+            str(value)
+        )
+
+
+# =========================================================
+# MAIN WINDOW
+# =========================================================
+
+class EiverWindow(QMainWindow):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle(
+            "E.I.V.E.R. - Command Interface"
+        )
+
+        self.setMinimumSize(
+            1200,
+            750
+        )
+
+        self.showMaximized()
+
+        self.setup_ui()
+
+        self.start_timers()
+
+        self.log(
+            "E.I.V.E.R. core initialized."
+        )
+
+        self.log(
+            "All primary systems online."
+        )
+
+        self.log(
+            "Awaiting operator command..."
+        )
+
+    # =====================================================
+    # UI
+    # =====================================================
+
+    def setup_ui(self):
+
+        central = QWidget()
+
+        self.setCentralWidget(
+            central
+        )
+
+        main_layout = QVBoxLayout(
+            central
+        )
+
+        main_layout.setContentsMargins(
+            12,
+            12,
+            12,
+            12
+        )
+
+        main_layout.setSpacing(
+            10
+        )
+
+        # -------------------------------------------------
+        # HEADER
+        # -------------------------------------------------
+
+        header = QHBoxLayout()
+
+        logo = QLabel(
+            "E.I.V.E.R."
+        )
+
+        logo.setObjectName(
+            "Logo"
+        )
+
+        subtitle = QLabel(
+            "ENHANCED INTELLIGENT VIRTUAL "
+            "EXECUTIVE RESPONSE"
+        )
+
+        subtitle.setObjectName(
+            "Subtitle"
+        )
+
+        self.clock = QLabel()
+
+        self.clock.setObjectName(
+            "Clock"
+        )
+
+        header.addWidget(
+            logo
+        )
+
+        header.addWidget(
+            subtitle
+        )
+
+        header.addStretch()
+
+        header.addWidget(
+            self.clock
+        )
+
+        main_layout.addLayout(
+            header
+        )
+
+        # -------------------------------------------------
+        # MAIN AREA
+        # -------------------------------------------------
+
+        content = QHBoxLayout()
+
+        # LEFT SIDE
+        left_panel = QVBoxLayout()
+
+        radar_title = QLabel(
+            "◉ SENSOR / RADAR MATRIX"
+        )
+
+        radar_title.setObjectName(
+            "PanelTitle"
+        )
+
+        left_panel.addWidget(
+            radar_title
+        )
+
+        self.radar = RadarWidget()
+
+        left_panel.addWidget(
+            self.radar,
+            1
+        )
+
+        # CENTER
+        center_panel = QVBoxLayout()
+
+        core_title = QLabel(
+            "◈ E.I.V.E.R. ARTIFICIAL INTELLIGENCE CORE"
+        )
+
+        core_title.setObjectName(
+            "PanelTitle"
+        )
+
+        center_panel.addWidget(
+            core_title
+        )
+
+        self.core = CoreWidget()
+
+        center_panel.addWidget(
+            self.core,
+            1
+        )
+
+        # RIGHT
+        right_panel = QVBoxLayout()
+
+        status_title = QLabel(
+            "SYSTEM TELEMETRY"
+        )
+
+        status_title.setObjectName(
+            "PanelTitle"
+        )
+
+        right_panel.addWidget(
+            status_title
+        )
+
+        self.cpu_card = StatusCard(
+            "CPU",
+            "0%"
+        )
+
+        self.ram_card = StatusCard(
+            "MEMORY",
+            "0%"
+        )
+
+        self.disk_card = StatusCard(
+            "DISK",
+            "0%"
+        )
+
+        self.network_card = StatusCard(
+            "NETWORK",
+            "ONLINE"
+        )
+
+        self.security_card = StatusCard(
+            "SECURITY",
+            "ACTIVE"
+        )
+
+        right_panel.addWidget(
+            self.cpu_card
+        )
+
+        right_panel.addWidget(
+            self.ram_card
+        )
+
+        right_panel.addWidget(
+            self.disk_card
+        )
+
+        right_panel.addWidget(
+            self.network_card
+        )
+
+        right_panel.addWidget(
+            self.security_card
+        )
+
+        right_panel.addStretch()
+
+        content.addLayout(
+            left_panel,
+            4
+        )
+
+        content.addLayout(
+            center_panel,
+            4
+        )
+
+        content.addLayout(
+            right_panel,
+            2
+        )
+
+        main_layout.addLayout(
+            content,
+            1
+        )
+
+        # -------------------------------------------------
+        # TERMINAL
+        # -------------------------------------------------
+
+        terminal_title = QLabel(
+            "▣ E.I.V.E.R. COMMAND TERMINAL"
+        )
+
+        terminal_title.setObjectName(
+            "PanelTitle"
+        )
+
+        main_layout.addWidget(
+            terminal_title
+        )
+
+        self.terminal = QTextEdit()
+
+        self.terminal.setReadOnly(
+            True
+        )
+
+        self.terminal.setMaximumHeight(
+            150
+        )
+
+        main_layout.addWidget(
+            self.terminal
+        )
+
+        # -------------------------------------------------
+        # COMMAND BAR
+        # -------------------------------------------------
+
+        command_layout = QHBoxLayout()
+
+        self.command_input = QLineEdit()
+
+        self.command_input.setPlaceholderText(
+            "Enter command..."
+        )
+
+        self.command_input.returnPressed.connect(
+            self.execute_command
+        )
+
+        execute_button = QPushButton(
+            "EXECUTE"
+        )
+
+        execute_button.clicked.connect(
+            self.execute_command
+        )
+
+        command_layout.addWidget(
+            self.command_input
+        )
+
+        command_layout.addWidget(
+            execute_button
+        )
+
+        main_layout.addLayout(
+            command_layout
+        )
+
+    # =====================================================
+    # TIMERS
+    # =====================================================
+
+    def start_timers(self):
+
+        self.telemetry_timer = QTimer(
+            self
+        )
+
+        self.telemetry_timer.timeout.connect(
+            self.update_telemetry
+        )
+
+        self.telemetry_timer.start(
+            1000
+        )
+
+        self.clock_timer = QTimer(
+            self
+        )
+
+        self.clock_timer.timeout.connect(
+            self.update_clock
+        )
+
+        self.clock_timer.start(
+            1000
+        )
+
+        self.update_clock()
+
+        self.update_telemetry()
+
+    # =====================================================
+    # CLOCK
+    # =====================================================
+
+    def update_clock(self):
+
+        now = datetime.datetime.now()
+
+        self.clock.setText(
+            now.strftime(
+                "%A  |  %d %B %Y  |  %H:%M:%S"
+            )
+        )
+
+    # =====================================================
+    # TELEMETRY
+    # =====================================================
+
+    def update_telemetry(self):
+
+        if psutil:
+
+            cpu = psutil.cpu_percent()
+
+            ram = psutil.virtual_memory().percent
+
+            disk = psutil.disk_usage("/").percent
+
+            self.cpu_card.set_value(
+                f"{cpu:.1f}%"
+            )
+
+            self.ram_card.set_value(
+                f"{ram:.1f}%"
+            )
+
+            self.disk_card.set_value(
+                f"{disk:.1f}%"
+            )
+
+            # Simple warning state
+            if cpu > 90:
+
+                self.log(
+                    "WARNING: CPU utilization HIGH."
+                )
+
+            if ram > 90:
+
+                self.log(
+                    "WARNING: MEMORY utilization HIGH."
+                )
+
+        else:
+
+            self.cpu_card.set_value(
+                "N/A"
+            )
+
+            self.ram_card.set_value(
+                "N/A"
+            )
+
+            self.disk_card.set_value(
+                "N/A"
+            )
+
+    # =====================================================
+    # TERMINAL
+    # =====================================================
+
+    def log(
+        self,
+        message
+    ):
+
+        timestamp = datetime.datetime.now().strftime(
+            "%H:%M:%S"
+        )
+
+        self.terminal.append(
+            f"[{timestamp}] {message}"
+        )
+
+    # =====================================================
+    # COMMAND PROCESSOR
+    # =====================================================
+
+    def execute_command(self):
+
+        command = self.command_input.text().strip()
+
+        if not command:
+
+            return
+
+        self.command_input.clear()
+
+        self.log(
+            f"> {command}"
+        )
+
+        lower = command.lower()
+
+        # -------------------------------------------------
+        # HELP
+        # -------------------------------------------------
+
+        if lower == "help":
+
+            self.log(
+                "Commands: status, time, system, "
+                "open youtube, open google, "
+                "search <query>, clear"
+            )
+
+            return
+
+        # -------------------------------------------------
+        # STATUS
+        # -------------------------------------------------
+
+        if lower == "status":
+
+            self.log(
+                "E.I.V.E.R. STATUS: ALL SYSTEMS NOMINAL."
+            )
+
+            return
+
+        # -------------------------------------------------
+        # TIME
+        # -------------------------------------------------
+
+        if lower == "time":
+
+            self.log(
+                datetime.datetime.now().strftime(
+                    "Current time: %H:%M:%S"
+                )
+            )
+
+            return
+
+        # -------------------------------------------------
+        # SYSTEM
+        # -------------------------------------------------
+
+        if lower == "system":
+
+            self.log(
+                f"OS: {platform.system()} "
+                f"{platform.release()}"
+            )
+
+            self.log(
+                f"Machine: {platform.machine()}"
+            )
+
+            return
+
+        # -------------------------------------------------
+        # CLEAR
+        # -------------------------------------------------
+
+        if lower == "clear":
+
+            self.terminal.clear()
+
+            return
+
+        # -------------------------------------------------
+        # OPEN WEBSITE
+        # -------------------------------------------------
+
+        if lower.startswith(
+            "open "
+        ):
+
+            target = lower[
+                5:
+            ].strip()
+
+            websites = {
+
+                "youtube":
+                    "https://youtube.com",
+
+                "google":
+                    "https://google.com",
+
+                "github":
+                    "https://github.com",
+
+                "gmail":
+                    "https://mail.google.com",
+
+                "wikipedia":
+                    "https://wikipedia.org",
+
+            }
+
+            if target in websites:
+
+                webbrowser.open(
+                    websites[target]
+                )
+
+                self.log(
+                    f"Opening {target}."
+                )
+
+                return
+
+            # Windows applications
+            if platform.system() == "Windows":
+
+                apps = {
+
+                    "notepad":
+                        "notepad.exe",
+
+                    "calculator":
+                        "calc.exe",
+
+                    "paint":
+                        "mspaint.exe",
+
+                    "file explorer":
+                        "explorer.exe",
+
+                }
+
+                if target in apps:
+
+                    try:
+
+                        subprocess.Popen(
+                            apps[target]
+                        )
+
+                        self.log(
+                            f"Launching {target}."
+                        )
+
+                    except Exception as error:
+
+                        self.log(
+                            f"Launch error: {error}"
+                        )
+
+                    return
+
+            self.log(
+                f"I don't know how to open '{target}'."
+            )
+
+            return
+
+        # -------------------------------------------------
+        # SEARCH
+        # -------------------------------------------------
+
+        if lower.startswith(
+            "search "
+        ):
+
+            query = command[
+                7:
+            ]
+
+            url = (
+                "https://www.google.com/search?q="
+                + query.replace(
+                    " ",
+                    "+"
+                )
+            )
+
+            webbrowser.open(
+                url
+            )
+
+            self.log(
+                f"Searching the web for: {query}"
+            )
+
+            return
+
+        # -------------------------------------------------
+        # UNKNOWN
+        # -------------------------------------------------
+
+        self.log(
+            "Command not recognized."
+        )
+
+        self.log(
+            "Type 'help' for available commands."
+        )
+
+
+# =========================================================
+# APPLICATION STYLE
+# =========================================================
+
+STYLE = """
+QMainWindow {
+    background-color: #02080e;
+}
+
+QWidget {
+    color: #b9f8ff;
+    font-family: Consolas;
+}
+
+QLabel#Logo {
+    color: #00eaff;
+    font-size: 30px;
+    font-weight: bold;
+    letter-spacing: 4px;
+}
+
+QLabel#Subtitle {
+    color: #397b88;
+    font-size: 11px;
+    margin-left: 15px;
+}
+
+QLabel#Clock {
+    color: #00dfff;
+    font-size: 13px;
+}
+
+QLabel#PanelTitle {
+    color: #00eaff;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 6px;
+    border-bottom: 1px solid #075466;
+}
+
+QFrame#StatusCard {
+    background-color: #03131c;
+    border: 1px solid #075466;
+    border-radius: 4px;
+    padding: 8px;
+    margin: 4px;
+}
+
+QLabel#CardTitle {
+    color: #397b88;
+    font-size: 10px;
+}
+
+QLabel#CardValue {
+    color: #00f0ff;
+    font-size: 21px;
+    font-weight: bold;
+}
+
+QTextEdit {
+    background-color: #01060a;
+    border: 1px solid #075466;
+    color: #00eaff;
+    font-family: Consolas;
+    font-size: 12px;
+    padding: 8px;
+}
+
+QLineEdit {
+    background-color: #020b12;
+    border: 1px solid #08758c;
+    color: #b9f8ff;
+    padding: 10px;
+    font-family: Consolas;
+    font-size: 13px;
+}
+
+QLineEdit:focus {
+    border: 1px solid #00eaff;
+}
+
+QPushButton {
+    background-color: #04232e;
+    border: 1px solid #00a9c4;
+    color: #00eaff;
+    padding: 10px 25px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #064457;
+}
+
+QPushButton:pressed {
+    background-color: #08758c;
+}
+"""
+
+
+# =========================================================
+# START APPLICATION
+# =========================================================
+
+def main():
+
+    app = QApplication(
+        sys.argv
+    )
+
+    app.setApplicationName(
+        APP_NAME
+    )
+
+    app.setStyleSheet(
+        STYLE
+    )
+
+    window = EiverWindow()
+
+    window.show()
+
+    sys.exit(
+        app.exec()
+    )
+
+
+if __name__ == "__main__":
+
+    main()
+```
