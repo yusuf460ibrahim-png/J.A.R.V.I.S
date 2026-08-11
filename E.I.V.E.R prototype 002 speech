@@ -1,0 +1,1216 @@
+"""
+=========================================================
+                 E.I.V.E.R. v1.0
+        Enhanced Intelligent Virtual Executive
+                    Response System
+=========================================================
+
+A J.A.R.V.I.S.-style personal AI assistant.
+
+Features:
+- Voice input
+- Voice output
+- Text input fallback
+- Web searching
+- Opening applications
+- Opening websites
+- System monitoring
+- Time and date
+- Calculator
+- Basic memory
+- Safe system commands
+- Command history
+
+Python version: 3.10+
+=========================================================
+"""
+
+import os
+import sys
+import json
+import time
+import platform
+import subprocess
+import webbrowser
+import datetime
+import urllib.parse
+import ast
+import operator as op
+
+# -------------------------------------------------------
+# Optional libraries
+# -------------------------------------------------------
+
+try:
+    import speech_recognition as sr
+    SPEECH_AVAILABLE = True
+except ImportError:
+    SPEECH_AVAILABLE = False
+
+try:
+    import pyttsx3
+    VOICE_AVAILABLE = True
+except ImportError:
+    VOICE_AVAILABLE = False
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+
+# -------------------------------------------------------
+# E.I.V.E.R. Configuration
+# -------------------------------------------------------
+
+ASSISTANT_NAME = "E.I.V.E.R."
+MEMORY_FILE = "eiver_memory.json"
+
+WAKE_WORDS = [
+    "eiver",
+    "hey eiver",
+    "okay eiver",
+    "ok eiver"
+]
+
+
+# -------------------------------------------------------
+# Voice Engine
+# -------------------------------------------------------
+
+engine = None
+
+if VOICE_AVAILABLE:
+    try:
+        engine = pyttsx3.init()
+
+        engine.setProperty("rate", 175)
+        engine.setProperty("volume", 1.0)
+
+    except Exception:
+        engine = None
+
+
+def speak(text):
+    """Make E.I.V.E.R. speak."""
+
+    print(f"\n{ASSISTANT_NAME}: {text}")
+
+    if engine:
+        try:
+            engine.say(text)
+            engine.runAndWait()
+        except Exception:
+            pass
+
+
+# -------------------------------------------------------
+# Speech Recognition
+# -------------------------------------------------------
+
+def listen():
+
+    if not SPEECH_AVAILABLE:
+
+        return input("\nYou: ").lower().strip()
+
+    recognizer = sr.Recognizer()
+
+    try:
+
+        with sr.Microphone() as source:
+
+            print("\nListening...")
+
+            recognizer.adjust_for_ambient_noise(
+                source,
+                duration=0.5
+            )
+
+            audio = recognizer.listen(
+                source,
+                timeout=5,
+                phrase_time_limit=10
+            )
+
+        print("Processing...")
+
+        command = recognizer.recognize_google(
+            audio
+        )
+
+        print(f"You: {command}")
+
+        return command.lower().strip()
+
+    except sr.WaitTimeoutError:
+
+        return ""
+
+    except sr.UnknownValueError:
+
+        speak("I didn't understand that.")
+
+        return ""
+
+    except sr.RequestError:
+
+        speak("Speech recognition is currently unavailable.")
+
+        return ""
+
+    except Exception as error:
+
+        print("Microphone error:", error)
+
+        return ""
+
+
+# -------------------------------------------------------
+# Memory System
+# -------------------------------------------------------
+
+def load_memory():
+
+    if not os.path.exists(MEMORY_FILE):
+
+        return {}
+
+    try:
+
+        with open(
+            MEMORY_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            return json.load(file)
+
+    except Exception:
+
+        return {}
+
+
+def save_memory(memory):
+
+    try:
+
+        with open(
+            MEMORY_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                memory,
+                file,
+                indent=4
+            )
+
+    except Exception as error:
+
+        print("Memory error:", error)
+
+
+memory = load_memory()
+
+
+# -------------------------------------------------------
+# Calculator
+# -------------------------------------------------------
+
+ALLOWED_OPERATORS = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.Pow: op.pow,
+    ast.Mod: op.mod,
+    ast.USub: op.neg,
+    ast.UAdd: op.pos,
+}
+
+
+def safe_calculate(expression):
+
+    try:
+
+        expression = expression.replace(
+            "^",
+            "**"
+        )
+
+        tree = ast.parse(
+            expression,
+            mode="eval"
+        )
+
+        return evaluate_node(tree.body)
+
+    except Exception:
+
+        return "I couldn't calculate that."
+
+
+def evaluate_node(node):
+
+    if isinstance(
+        node,
+        ast.Constant
+    ):
+
+        if isinstance(
+            node.value,
+            (int, float)
+        ):
+
+            return node.value
+
+        raise ValueError()
+
+    if isinstance(
+        node,
+        ast.BinOp
+    ):
+
+        left = evaluate_node(
+            node.left
+        )
+
+        right = evaluate_node(
+            node.right
+        )
+
+        operator = ALLOWED_OPERATORS.get(
+            type(node.op)
+        )
+
+        if operator is None:
+
+            raise ValueError()
+
+        return operator(
+            left,
+            right
+        )
+
+    if isinstance(
+        node,
+        ast.UnaryOp
+    ):
+
+        operand = evaluate_node(
+            node.operand
+        )
+
+        operator = ALLOWED_OPERATORS.get(
+            type(node.op)
+        )
+
+        if operator is None:
+
+            raise ValueError()
+
+        return operator(
+            operand
+        )
+
+    raise ValueError()
+
+
+# -------------------------------------------------------
+# System Information
+# -------------------------------------------------------
+
+def system_status():
+
+    if not PSUTIL_AVAILABLE:
+
+        speak(
+            "The psutil library is not installed, "
+            "so detailed system monitoring is unavailable."
+        )
+
+        return
+
+    try:
+
+        cpu = psutil.cpu_percent(
+            interval=1
+        )
+
+        memory_info = psutil.virtual_memory()
+
+        disk = psutil.disk_usage("/")
+
+        battery = psutil.sensors_battery()
+
+        speak(
+            f"CPU usage is {cpu} percent. "
+            f"Memory usage is {memory_info.percent} percent. "
+            f"Disk usage is {disk.percent} percent."
+        )
+
+        if battery:
+
+            speak(
+                f"Battery is at {battery.percent} percent."
+            )
+
+            if battery.power_plugged:
+
+                speak(
+                    "The computer is connected to power."
+                )
+
+            else:
+
+                speak(
+                    "The computer is running on battery."
+                )
+
+    except Exception as error:
+
+        print("System monitoring error:", error)
+
+
+# -------------------------------------------------------
+# Time
+# -------------------------------------------------------
+
+def tell_time():
+
+    now = datetime.datetime.now()
+
+    current_time = now.strftime(
+        "%I:%M %p"
+    )
+
+    speak(
+        f"The current time is {current_time}."
+    )
+
+
+def tell_date():
+
+    today = datetime.datetime.now()
+
+    current_date = today.strftime(
+        "%A, %d %B %Y"
+    )
+
+    speak(
+        f"Today is {current_date}."
+    )
+
+
+# -------------------------------------------------------
+# Web Search
+# -------------------------------------------------------
+
+def web_search(query):
+
+    if not query:
+
+        speak(
+            "What would you like me to search for?"
+        )
+
+        return
+
+    encoded = urllib.parse.quote_plus(
+        query
+    )
+
+    url = (
+        "https://www.google.com/search?q="
+        + encoded
+    )
+
+    webbrowser.open(url)
+
+    speak(
+        f"Searching the web for {query}."
+    )
+
+
+# -------------------------------------------------------
+# Open Websites
+# -------------------------------------------------------
+
+def open_website(site):
+
+    sites = {
+
+        "youtube":
+            "https://www.youtube.com",
+
+        "google":
+            "https://www.google.com",
+
+        "github":
+            "https://github.com",
+
+        "gmail":
+            "https://mail.google.com",
+
+        "wikipedia":
+            "https://www.wikipedia.org",
+
+    }
+
+    if site in sites:
+
+        webbrowser.open(
+            sites[site]
+        )
+
+        speak(
+            f"Opening {site}."
+        )
+
+        return True
+
+    return False
+
+
+# -------------------------------------------------------
+# Open Applications
+# -------------------------------------------------------
+
+def open_application(app):
+
+    app = app.lower().strip()
+
+    system = platform.system()
+
+    # Windows
+    if system == "Windows":
+
+        applications = {
+
+            "notepad":
+                "notepad.exe",
+
+            "calculator":
+                "calc.exe",
+
+            "paint":
+                "mspaint.exe",
+
+            "file explorer":
+                "explorer.exe",
+
+            "explorer":
+                "explorer.exe",
+
+        }
+
+        if app in applications:
+
+            try:
+
+                subprocess.Popen(
+                    applications[app]
+                )
+
+                speak(
+                    f"Opening {app}."
+                )
+
+                return True
+
+            except Exception:
+
+                pass
+
+    # Linux
+    elif system == "Linux":
+
+        applications = {
+
+            "calculator":
+                "gnome-calculator",
+
+            "file manager":
+                "nautilus",
+
+            "files":
+                "nautilus",
+
+        }
+
+        if app in applications:
+
+            try:
+
+                subprocess.Popen(
+                    applications[app]
+                )
+
+                speak(
+                    f"Opening {app}."
+                )
+
+                return True
+
+            except Exception:
+
+                pass
+
+    # macOS
+    elif system == "Darwin":
+
+        applications = {
+
+            "calculator":
+                "Calculator",
+
+            "text editor":
+                "TextEdit",
+
+            "finder":
+                "Finder",
+
+        }
+
+        if app in applications:
+
+            try:
+
+                subprocess.Popen(
+                    ["open", "-a", applications[app]]
+                )
+
+                speak(
+                    f"Opening {app}."
+                )
+
+                return True
+
+            except Exception:
+
+                pass
+
+    return False
+
+
+# -------------------------------------------------------
+# Memory Commands
+# -------------------------------------------------------
+
+def remember(command):
+
+    text = command.replace(
+        "remember that",
+        "",
+        1
+    ).strip()
+
+    if not text:
+
+        speak(
+            "What would you like me to remember?"
+        )
+
+        return
+
+    if "=" in text:
+
+        key, value = text.split(
+            "=",
+            1
+        )
+
+        key = key.strip()
+        value = value.strip()
+
+        memory[key] = value
+
+    else:
+
+        key = f"memory_{len(memory) + 1}"
+
+        memory[key] = text
+
+    save_memory(memory)
+
+    speak(
+        "I have saved that to memory."
+    )
+
+
+def recall_memory(command):
+
+    if not memory:
+
+        speak(
+            "My memory is currently empty."
+        )
+
+        return
+
+    question = command.replace(
+        "what do you remember",
+        "",
+        1
+    ).strip()
+
+    if question:
+
+        for key, value in memory.items():
+
+            if question.lower() in (
+                key.lower()
+                + " "
+                + value.lower()
+            ):
+
+                speak(
+                    f"I remember that {value}."
+                )
+
+                return
+
+    speak(
+        "Here is what I remember:"
+    )
+
+    for key, value in memory.items():
+
+        speak(
+            f"{key}: {value}"
+        )
+
+
+# -------------------------------------------------------
+# System Information
+# -------------------------------------------------------
+
+def computer_information():
+
+    system = platform.system()
+
+    release = platform.release()
+
+    machine = platform.machine()
+
+    processor = platform.processor()
+
+    speak(
+        f"You are running {system} "
+        f"{release} on a {machine} system."
+    )
+
+    if processor:
+
+        speak(
+            f"Processor: {processor}."
+        )
+
+
+# -------------------------------------------------------
+# Help
+# -------------------------------------------------------
+
+def show_help():
+
+    print("""
+
+=========================================================
+                    E.I.V.E.R.
+                 COMMAND DIRECTORY
+=========================================================
+
+GENERAL
+---------------------------------------------------------
+hello
+hi
+how are you
+who are you
+what can you do
+
+TIME
+---------------------------------------------------------
+what time is it
+what is the date
+
+COMPUTER
+---------------------------------------------------------
+system status
+computer information
+
+APPLICATIONS
+---------------------------------------------------------
+open notepad
+open calculator
+open paint
+open file explorer
+
+WEBSITES
+---------------------------------------------------------
+open youtube
+open google
+open github
+open gmail
+open wikipedia
+
+SEARCH
+---------------------------------------------------------
+search for <something>
+
+CALCULATOR
+---------------------------------------------------------
+calculate 25 * 10
+calculate 100 / 4
+calculate 2 ^ 8
+
+MEMORY
+---------------------------------------------------------
+remember that my favorite subject = physics
+what do you remember
+forget memory
+
+EXIT
+---------------------------------------------------------
+goodbye
+exit
+quit
+shutdown assistant
+
+=========================================================
+""")
+
+
+# -------------------------------------------------------
+# Safe Confirmation
+# -------------------------------------------------------
+
+def confirm_action(action):
+
+    speak(
+        f"Please confirm: {action}. "
+        "Say yes or no."
+    )
+
+    answer = listen()
+
+    return answer in [
+        "yes",
+        "yeah",
+        "yes eiver",
+        "confirm"
+    ]
+
+
+# -------------------------------------------------------
+# Main Command Processor
+# -------------------------------------------------------
+
+def process_command(command):
+
+    if not command:
+
+        return True
+
+    command = command.lower().strip()
+
+    # ----------------------------------------------
+    # Exit
+    # ----------------------------------------------
+
+    if command in [
+        "exit",
+        "quit",
+        "goodbye",
+        "shutdown assistant",
+        "go offline"
+    ]:
+
+        speak(
+            "Going offline. Goodbye."
+        )
+
+        return False
+
+    # ----------------------------------------------
+    # Greetings
+    # ----------------------------------------------
+
+    if command in [
+        "hello",
+        "hi",
+        "hey",
+        "hello eiver"
+    ]:
+
+        speak(
+            "Hello. E.I.V.E.R. is online and ready."
+        )
+
+        return True
+
+    # ----------------------------------------------
+    # Identity
+    # ----------------------------------------------
+
+    if (
+        "who are you" in command
+        or "what are you" in command
+    ):
+
+        speak(
+            "I am E.I.V.E.R., "
+            "your Enhanced Intelligent Virtual "
+            "Executive Response assistant."
+        )
+
+        return True
+
+    # ----------------------------------------------
+    # Capabilities
+    # ----------------------------------------------
+
+    if (
+        "what can you do" in command
+        or "help" == command
+    ):
+
+        show_help()
+
+        return True
+
+    # ----------------------------------------------
+    # Time
+    # ----------------------------------------------
+
+    if (
+        "what time" in command
+        or "current time" in command
+    ):
+
+        tell_time()
+
+        return True
+
+    # ----------------------------------------------
+    # Date
+    # ----------------------------------------------
+
+    if (
+        "what is the date" in command
+        or "what's the date" in command
+        or "today's date" in command
+    ):
+
+        tell_date()
+
+        return True
+
+    # ----------------------------------------------
+    # System Status
+    # ----------------------------------------------
+
+    if (
+        "system status" in command
+        or "system check" in command
+        or "check the system" in command
+    ):
+
+        system_status()
+
+        return True
+
+    # ----------------------------------------------
+    # Computer Information
+    # ----------------------------------------------
+
+    if (
+        "computer information" in command
+        or "computer specs" in command
+        or "system information" in command
+    ):
+
+        computer_information()
+
+        return True
+
+    # ----------------------------------------------
+    # Web Search
+    # ----------------------------------------------
+
+    if command.startswith(
+        "search for "
+    ):
+
+        query = command[
+            len("search for "):
+        ]
+
+        web_search(query)
+
+        return True
+
+    if command.startswith(
+        "search "
+    ):
+
+        query = command[
+            len("search "):
+        ]
+
+        web_search(query)
+
+        return True
+
+    # ----------------------------------------------
+    # Websites
+    # ----------------------------------------------
+
+    if command.startswith(
+        "open "
+    ):
+
+        target = command[
+            len("open "):
+        ].strip()
+
+        if open_website(target):
+
+            return True
+
+        if open_application(target):
+
+            return True
+
+    # ----------------------------------------------
+    # Calculator
+    # ----------------------------------------------
+
+    if command.startswith(
+        "calculate "
+    ):
+
+        expression = command[
+            len("calculate "):
+        ]
+
+        result = safe_calculate(
+            expression
+        )
+
+        speak(
+            f"The answer is {result}."
+        )
+
+        return True
+
+    # ----------------------------------------------
+    # Memory
+    # ----------------------------------------------
+
+    if command.startswith(
+        "remember that "
+    ):
+
+        remember(command)
+
+        return True
+
+    if (
+        "what do you remember" in command
+    ):
+
+        recall_memory(command)
+
+        return True
+
+    # ----------------------------------------------
+    # Forget memory
+    # ----------------------------------------------
+
+    if command == "forget memory":
+
+        if confirm_action(
+            "erase all stored memory"
+        ):
+
+            memory.clear()
+
+            save_memory(memory)
+
+            speak(
+                "All stored memory has been erased."
+            )
+
+        else:
+
+            speak(
+                "Memory deletion cancelled."
+            )
+
+        return True
+
+    # ----------------------------------------------
+    # Basic conversation
+    # ----------------------------------------------
+
+    if (
+        "how are you" in command
+    ):
+
+        speak(
+            "All systems are functioning normally."
+        )
+
+        return True
+
+    if (
+        "thank you" in command
+        or "thanks" in command
+    ):
+
+        speak(
+            "You're welcome."
+        )
+
+        return True
+
+    # ----------------------------------------------
+    # Unknown command
+    # ----------------------------------------------
+
+    speak(
+        "I don't have a built-in function for that "
+        "yet. You can ask me to search the web."
+    )
+
+    return True
+
+
+# -------------------------------------------------------
+# Startup
+# -------------------------------------------------------
+
+def startup():
+
+    print("""
+=========================================================
+
+             EEEEE  III  V   V  EEEEE  RRRR
+             E       I   V   V  E      R   R
+             EEEE    I   V   V  EEEE   RRRR
+             E       I    V V   E      R R
+             EEEEE  III    V    EEEEE  R  RR
+
+       ENHANCED INTELLIGENT VIRTUAL EXECUTIVE
+                  RESPONSE SYSTEM
+
+=========================================================
+""")
+
+    print(
+        f"Operating System: {platform.system()}"
+    )
+
+    print(
+        f"Python Version: {sys.version.split()[0]}"
+    )
+
+    if SPEECH_AVAILABLE:
+
+        print(
+            "Voice recognition: AVAILABLE"
+        )
+
+    else:
+
+        print(
+            "Voice recognition: NOT INSTALLED"
+        )
+
+    if VOICE_AVAILABLE:
+
+        print(
+            "Voice output: AVAILABLE"
+        )
+
+    else:
+
+        print(
+            "Voice output: NOT INSTALLED"
+        )
+
+    if PSUTIL_AVAILABLE:
+
+        print(
+            "System monitoring: AVAILABLE"
+        )
+
+    else:
+
+        print(
+            "System monitoring: NOT INSTALLED"
+        )
+
+    print(
+        "\nType 'help' to see available commands."
+    )
+
+
+# -------------------------------------------------------
+# Main Program
+# -------------------------------------------------------
+
+def main():
+
+    startup()
+
+    speak(
+        "E.I.V.E.R. is online. "
+        "How may I assist you?"
+    )
+
+    while True:
+
+        print(
+            "\nChoose input mode:"
+        )
+
+        print(
+            "1. Voice"
+        )
+
+        print(
+            "2. Keyboard"
+        )
+
+        mode = input(
+            "\nMode: "
+        ).strip()
+
+        if mode == "1":
+
+            command = listen()
+
+        else:
+
+            command = input(
+                "\nYou: "
+            ).lower().strip()
+
+        if not process_command(command):
+
+            break
+
+        time.sleep(0.3)
+
+
+# -------------------------------------------------------
+# Run E.I.V.E.R.
+# -------------------------------------------------------
+
+if __name__ == "__main__":
+
+    main()
