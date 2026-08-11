@@ -33,3 +33,4 @@ Camera AI
 File Manager
 
 Future Robotics Integration
+for GUI  effect install "pip install PySide6 psutil" on cmd first
